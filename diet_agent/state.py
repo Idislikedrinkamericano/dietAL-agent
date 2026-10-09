@@ -17,7 +17,7 @@ class MealItem(TypedDict):
 
 class DietState(TypedDict, total=False):
     user_input: str              # 用户原始输入，如 "午饭吃了两碗米饭"
-    parsed_items: list[dict]     # parse_meal 输出: [{"name":..., "amount":...}]
+    parsed_items: list[dict]     # parse_meal 输出: [{"name":..., "servings":...}]
     new_meals: list[MealItem]    # estimate_nutrition 输出: 带营养估算的条目
     daily_meals: list[MealItem]  # 今天已记录的所有餐食
     daily_totals: NutritionFacts # 今天累计摄入
