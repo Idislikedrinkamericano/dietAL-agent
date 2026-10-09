@@ -4,6 +4,7 @@ from langgraph.graph import StateGraph, END
 
 from .state import DietState
 from .nutrition_db import parse_meal_text, estimate_nutrition, unit_of, FOOD_DB
+from .llm_parser import parse_meal_with_llm
 from .store import load_today, save
 
 # 默认每日目标（可在 demo 里改）
@@ -16,12 +17,21 @@ def _llm_available() -> bool:
 
 # ---------------- 节点 1：解析 ----------------
 def parse_meal(state: DietState) -> dict:
-    """把 '吃了两碗米饭' 解析成 [{'name': '米饭', 'servings': 2.0}]。
+    """把自然语言解析成 [{"name": "米饭", "servings": 2.0}]。
 
-    v1 用启发式；想更准时在这里换成 LLM 调用。
+    有 OPENAI_API_KEY 时优先使用 LLM；没有 key、调用失败，或模型没有
+    解析出支持的食物时，自动回退到 v1 的关键词 + 正则解析。
     """
-    items = parse_meal_text(state["user_input"])
-    return {"parsed_items": items}
+    text = state["user_input"]
+    if _llm_available():
+        try:
+            items = parse_meal_with_llm(text)
+            if items:
+                return {"parsed_items": items}
+        except Exception as exc:
+            print(f"[LLM parser fallback: {exc}]")
+
+    return {"parsed_items": parse_meal_text(text)}
 
 
 # ---------------- 节点 2：估算营养 ----------------
