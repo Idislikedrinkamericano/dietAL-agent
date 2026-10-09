@@ -14,11 +14,12 @@ from .nutrition_db import FOOD_DB
 
 def _strip_code_fence(text: str) -> str:
     text = text.strip()
-    if text.startswith("~~~"):
+    fence = chr(96) * 3
+    if text.startswith(fence):
         lines = text.splitlines()
         if lines:
             lines = lines[1:]
-        if lines and lines[-1].strip() == "~~~":
+        if lines and lines[-1].strip() == fence:
             lines = lines[:-1]
         text = "\n".join(lines).strip()
     return text
@@ -56,9 +57,7 @@ Allowed foods and base units:
             {"role": "user", "content": text},
         ],
     )
-    raw = response.output_text.strip()
-    if raw.startswith("~~~"):
-        raw = _strip_code_fence(raw)
+    raw = _strip_code_fence(response.output_text)
     payload = json.loads(raw)
     items = payload.get("items", [])
     if not isinstance(items, list):
