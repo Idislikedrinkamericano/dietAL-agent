@@ -44,6 +44,7 @@ Rules:
 - 半/half => 0.5. 一碗半/one and a half => 1.5.
 - If a supported food is mentioned without a quantity, use 1.0.
 - Ignore foods that cannot reasonably map to an allowed food.
+- For branded restaurant items or named menu products, do not collapse them into a generic food just to force a match. It is better to return no item than to give a falsely precise nutrition estimate.
 - Do not invent nutrition values and do not add commentary.
 
 Allowed foods and base units:

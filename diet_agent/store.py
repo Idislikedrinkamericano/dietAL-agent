@@ -33,3 +33,18 @@ def save(data: dict) -> None:
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(STORE_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def undo_last_meal() -> dict | None:
+    """撤销今天最后一条已记录食物，并重新计算累计营养。"""
+    day = load_today()
+    if not day["meals"]:
+        return None
+    removed = day["meals"].pop()
+    totals = {"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0}
+    for meal in day["meals"]:
+        for key in totals:
+            totals[key] = round(totals[key] + meal["nutrition"][key], 1)
+    day["totals"] = totals
+    save(day)
+    return removed
