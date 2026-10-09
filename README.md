@@ -1,67 +1,241 @@
-# 🍱 饭搭子 Diet Agent
+# 🍱 DietAL Agent
 
-一个极简的 LangGraph 饮食记录 agent：你随手发一句话，它解析食物、估算营养、记账，并给一句点评。
+A small LangGraph project that helps you log meals in plain language.
 
-## 运行
+You type something like:
+
+```text
+I ate two bowls of rice and 200g of chicken breast.
+```
+
+The program will:
+
+1. understand what foods you mentioned,
+2. estimate calories and macros,
+3. add the meal to today's log,
+4. show your daily total,
+5. give a short suggestion.
+
+[中文说明](README.zh-CN.md)
+
+---
+
+## What this project is
+
+This is a learning project for understanding how an AI agent workflow works.
+
+The current flow is:
+
+```text
+Your message
+   ↓
+Meal parser
+   ↓
+Nutrition lookup
+   ↓
+Daily log
+   ↓
+Feedback
+```
+
+If you set an OpenAI API key, the meal parser uses an LLM.
+If you do not set a key, the project still works with a simpler local parser.
+
+Nutrition numbers are not guessed by the LLM. They are calculated from the local food database in `diet_agent/nutrition_db.py`.
+
+---
+
+## How to open and run it
+
+### 1. Open Terminal
+
+On macOS:
+
+- press `Command + Space`
+- search for `Terminal`
+- open it
+
+### 2. Download the project
+
+Run:
 
 ```bash
-pip install -r requirements.txt
+git clone https://github.com/Idislikedrinkamericano/dietAL-agent.git
+```
+
+Then enter the project folder:
+
+```bash
+cd dietAL-agent
+```
+
+### 3. Create a Python environment
+
+Run:
+
+```bash
+python3 -m venv .venv
+```
+
+Activate it:
+
+```bash
+source .venv/bin/activate
+```
+
+After activation, you should see something like `(.venv)` at the beginning of the Terminal line.
+
+### 4. Install the packages
+
+Run:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+This means:
+
+> Install all Python packages that this project needs.
+
+You usually only need to do this once.
+
+### 5. Start the app
+
+Run:
+
+```bash
 python demo.py
 ```
 
-不配置 API key 也能运行：系统会自动使用原来的关键词 + 正则解析器。
+This means:
 
-如果想启用 V2 的 LLM meal parser：
+> Start the DietAL Agent program.
+
+You should then see a prompt like:
+
+```text
+🍱 饭搭子 Diet Agent 启动！
+>
+```
+
+Now type what you ate and press Enter.
+
+Example:
+
+```text
+> 午饭吃了两碗米饭和200g鸡胸肉
+```
+
+---
+
+## Useful commands inside the app
+
+While the app is running:
+
+```text
+/today
+```
+
+Shows today's nutrition total.
+
+```text
+/goals
+```
+
+Shows the current daily goals.
+
+```text
+quit
+```
+
+Closes the app.
+
+---
+
+## Optional: turn on the LLM parser
+
+You do not need an API key to run the project.
+
+Without a key, DietAL uses the simple local parser.
+
+If you want the program to understand more natural sentences, set your OpenAI API key before running the app:
 
 ```bash
 export OPENAI_API_KEY="your-key"
-# 可选，默认 gpt-4.1-mini
-export OPENAI_MODEL="gpt-4.1-mini"
 python demo.py
 ```
 
-配置后，`parse_meal` 会优先调用 LLM；如果调用失败、返回格式异常，或没有识别出支持的食物，会自动回退到本地解析器。
+Do not put your real API key into GitHub or commit it into the repository.
 
-```
-> 午饭吃了两碗米饭和一块鸡胸肉
-已记录：米饭(2碗): 520.0kcal 蛋白10.0g；鸡胸肉(1块): 165.0kcal 蛋白31.0g
-今日累计：685.0kcal / 蛋白41.0g / 碳水114.0g / 脂肪4.8g
-💡 蛋白还差不少，晚上加个鸡蛋或鸡胸肉？
-```
+You can also choose another model:
 
-命令：`/today` 看今日汇总，`/goals` 看目标，`quit` 退出。
-
-## 图结构
-
-```
-parse_meal → estimate_nutrition → update_log → feedback
+```bash
+export OPENAI_MODEL="gpt-4.1-mini"
 ```
 
-| 节点 | 干什么 |
-|---|---|
-| `parse_meal` | 自然语言 → `[{name, servings}]`；有 API key 时用 LLM，否则/失败时回退关键词 + 正则 |
-| `estimate_nutrition` | 查内置食物库估算热量/蛋白/碳水/脂肪 |
-| `update_log` | 追加到今日记录，累计并写入 `data/daily_log.json`（每天零点自动清零） |
-| `feedback` | 对比目标生成点评 |
+If the LLM call fails, the program automatically falls back to the local parser.
 
-## 文件
+---
 
-- `diet_agent/state.py` — `DietState` 定义
-- `diet_agent/graph.py` — 4 个节点 + 图组装 + LLM fallback
-- `diet_agent/llm_parser.py` — OpenAI Responses API meal parser
-- `diet_agent/nutrition_db.py` — 30 种常见食物营养表 + 启发式解析
-- `diet_agent/store.py` — JSON 持久化
-- `demo.py` — 交互式 CLI
+## Example
 
-## 下一步可玩
+Input:
 
-1. **Nutrition Tool**：把营养查询封装成显式 tool，让 Agent 真正调用工具
-2. **可编辑目标**：支持“每天 1800 kcal、蛋白 140g”
-3. **Memory**：理解“刚才那顿再加一个鸡蛋”
-4. **LLM feedback**：让模型解释确定性的营养数据，而不是自己算热量
-5. **拍照识别**：多模态输入，直接拍食物照片
+```text
+午饭吃了两碗米饭和200g鸡胸肉
+```
 
+The program may produce something like:
 
-## V2 设计原则
+```text
+已记录：米饭(2×碗): 520.0kcal 蛋白10.0g；
+鸡胸肉(2×100g): 330.0kcal 蛋白62.0g
 
-LLM 只负责自然语言理解；热量和宏量营养素仍然由本地 `FOOD_DB` 做确定性计算。这样比让模型直接“猜热量”更容易测试，也更可控。
+今日累计：
+850.0kcal / 蛋白72.0g / 碳水114.0g / 脂肪7.8g
+```
+
+---
+
+## Main files
+
+```text
+dietAL-agent/
+├── demo.py
+├── requirements.txt
+├── diet_agent/
+│   ├── graph.py
+│   ├── llm_parser.py
+│   ├── nutrition_db.py
+│   ├── state.py
+│   └── store.py
+```
+
+What they do:
+
+- `demo.py` — starts the command-line app
+- `graph.py` — defines the LangGraph workflow
+- `llm_parser.py` — turns natural language into structured meal data
+- `nutrition_db.py` — stores food nutrition values and performs nutrition calculations
+- `state.py` — defines the shared data passed through the graph
+- `store.py` — saves today's food log
+
+---
+
+## Current limitation
+
+This is still a small learning project.
+
+The nutrition database currently supports only a limited set of common foods. Even when the LLM parser is enabled, unsupported foods may not be logged yet.
+
+---
+
+## Next steps
+
+Planned improvements:
+
+- turn nutrition lookup into an explicit tool,
+- let users set their own calorie and protein goals,
+- add memory for follow-up messages such as "add one more egg to that meal",
+- improve feedback,
+- support food photos later.
