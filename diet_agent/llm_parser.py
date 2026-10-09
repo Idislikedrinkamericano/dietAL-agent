@@ -1,78 +1,57 @@
-"""LLM-based meal parsing with a deterministic fallback path.
-
-The parser converts free-form meal descriptions into the same compact
-[{"name": "...", "servings": 1.0}] shape used by the rest of the graph.
-Nutrition math remains deterministic and is still handled by nutrition_db.py.
-"""
+"""LLM meal parser. The model extracts food + grams; nutrition math stays deterministic."""
 import json
 import os
-
 from openai import OpenAI
-
-from .nutrition_db import FOOD_DB
+from .nutrition_db import FOOD_DB, ALIASES, default_unit_grams
 
 
 def _strip_code_fence(text: str) -> str:
     text = text.strip()
     fence = chr(96) * 3
     if text.startswith(fence):
-        lines = text.splitlines()
-        if lines:
-            lines = lines[1:]
+        lines = text.splitlines()[1:]
         if lines and lines[-1].strip() == fence:
             lines = lines[:-1]
-        text = "\n".join(lines).strip()
+        return "\n".join(lines).strip()
     return text
 
 
 def parse_meal_with_llm(text: str) -> list[dict]:
-    """Parse a meal description with an OpenAI model."""
-    allowed = [{"name": name, "unit": facts["unit"]} for name, facts in FOOD_DB.items()]
-    model = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
-    client = OpenAI()
-
-    instructions = f"""
-You are a meal parser for a nutrition logging app.
-Return JSON only, with this exact shape:
-{{"items":[{{"name":"food name","servings":1.0}}]}}
+    allowed = [{"name": n, "household_units_g": default_unit_grams(n)} for n in FOOD_DB]
+    prompt = f"""
+You are a meal parser. Return JSON only:
+{{"items":[{{"name":"鸡胸肉","grams":200,"amount":"200g","assumed":false}}]}}
 
 Rules:
-- "name" MUST be one of the allowed foods listed below.
-- "servings" MUST be a positive number in that food's listed base unit.
-- Normalize quantities to the base unit. Example: if 鸡胸肉 uses 100g,
-  then 200g鸡胸肉 => 2.0 servings.
-- 半/half => 0.5. 一碗半/one and a half => 1.5.
-- If a supported food is mentioned without a quantity, use 1.0.
-- Ignore foods that cannot reasonably map to an allowed food.
-- For branded restaurant items or named menu products, do not collapse them into a generic food just to force a match. It is better to return no item than to give a falsely precise nutrition estimate.
-- Do not invent nutrition values and do not add commentary.
+- name must be one of the allowed foods.
+- Convert every quantity to grams.
+- Explicit grams are never assumed.
+- Household units (个/碗/杯/片/份/块/根/勺) may use the supplied default gram weights and must set assumed=true.
+- If quantity is omitted, use one reasonable household unit from the supplied defaults and set assumed=true.
+- Do not invent nutrition values.
+- Do not force branded menu products into a generic food if the mapping is uncertain.
+- Positive grams only, max 5000g per item.
 
-Allowed foods and base units:
+Allowed foods:
 {json.dumps(allowed, ensure_ascii=False)}
 """.strip()
 
+    client = OpenAI()
     response = client.responses.create(
-        model=model,
-        input=[
-            {"role": "system", "content": instructions},
-            {"role": "user", "content": text},
-        ],
+        model=os.environ.get("OPENAI_MODEL", "gpt-4.1-mini"),
+        input=[{"role": "system", "content": prompt}, {"role": "user", "content": text}],
     )
-    raw = _strip_code_fence(response.output_text)
-    payload = json.loads(raw)
-    items = payload.get("items", [])
-    if not isinstance(items, list):
-        raise ValueError("LLM parser returned an invalid items field.")
-
-    parsed = []
-    for item in items:
+    payload = json.loads(_strip_code_fence(response.output_text))
+    out = []
+    for item in payload.get("items", []):
         if not isinstance(item, dict):
             continue
         name = item.get("name")
         try:
-            servings = float(item.get("servings"))
+            grams = float(item.get("grams"))
         except (TypeError, ValueError):
             continue
-        if name in FOOD_DB and 0 < servings <= 100:
-            parsed.append({"name": name, "servings": servings})
-    return parsed
+        if name in FOOD_DB and 0 < grams <= 5000:
+            amount = str(item.get("amount") or f"{grams:g}g")
+            out.append({"name": name, "grams": round(grams, 1), "amount": amount, "assumed": bool(item.get("assumed", False))})
+    return out
