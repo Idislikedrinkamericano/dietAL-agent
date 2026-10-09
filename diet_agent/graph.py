@@ -15,6 +15,57 @@ def _llm_available() -> bool:
     return bool(os.environ.get("OPENAI_API_KEY"))
 
 
+# ---------------- 节点 0：判断用户是在记账，还是在讨论/纠正 ----------------
+def classify_intent(state: DietState) -> dict:
+    """区分“我要记录一顿饭”和“我在讨论/质疑上一条结果”。
+
+    这一步很重要：如果用户只是说“我觉得这个热量不对”，不能再次把
+    句子里的“汉堡”当成一顿新饭记进去。
+    """
+    text = state["user_input"].strip()
+    lower = text.lower()
+
+    meal_actions = (
+        "吃了", "刚吃", "吃的", "早餐", "午饭", "晚饭", "夜宵", "加餐",
+        "喝了", "喝的", "ate ", "i ate", "i had", "had ",
+    )
+    correction_or_question = (
+        "我觉得", "不对", "不是", "算错", "没这么", "这么低", "这么高",
+        "太低", "太高", "应该是", "真的吗", "为什么", "怎么算", "热量没",
+        "calorie", "calories",
+    )
+
+    has_meal_action = any(marker in lower for marker in meal_actions)
+    looks_like_discussion = any(marker in lower for marker in correction_or_question)
+
+    if looks_like_discussion and not has_meal_action:
+        return {"intent": "conversation"}
+    if ("?" in text or "？" in text) and not has_meal_action:
+        return {"intent": "conversation"}
+    return {"intent": "log_meal"}
+
+
+def route_intent(state: DietState) -> str:
+    return state.get("intent", "log_meal")
+
+
+def conversation_response(state: DietState) -> dict:
+    """讨论/纠正消息只回复，不改饮食记录。"""
+    day = load_today()
+    totals = day["totals"]
+    return {
+        "daily_meals": day["meals"],
+        "daily_totals": totals,
+        "date": day["date"],
+        "feedback": (
+            "这句话看起来是在讨论或纠正上一条记录，所以我没有再次记账。\n"
+            "目前热量来自本地的通用食物数据库；像餐厅品牌、具体汉堡型号、"
+            "lettuce wrap、鸡柳这类商品还不能精确匹配，所以会退化成“通用汉堡”的估值。\n"
+            "如果上一条记错了，可以输入 /undo 撤销上一条记录。"
+        ),
+    }
+
+
 # ---------------- 节点 1：解析 ----------------
 def parse_meal(state: DietState) -> dict:
     """把自然语言解析成 [{"name": "米饭", "servings": 2.0}]。
@@ -101,11 +152,19 @@ def feedback(state: DietState) -> dict:
 def build_graph():
     """组装并编译图。"""
     g = StateGraph(DietState)
+    g.add_node("classify_intent", classify_intent)
+    g.add_node("conversation_response", conversation_response)
     g.add_node("parse_meal", parse_meal)
     g.add_node("estimate_nutrition", estimate_nutrition_node)
     g.add_node("update_log", update_log)
     g.add_node("feedback", feedback)
-    g.set_entry_point("parse_meal")
+    g.set_entry_point("classify_intent")
+    g.add_conditional_edges(
+        "classify_intent",
+        route_intent,
+        {"log_meal": "parse_meal", "conversation": "conversation_response"},
+    )
+    g.add_edge("conversation_response", END)
     g.add_edge("parse_meal", "estimate_nutrition")
     g.add_edge("estimate_nutrition", "update_log")
     g.add_edge("update_log", "feedback")
